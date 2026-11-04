@@ -30,6 +30,7 @@ def test_map_columns_rejects_missing_required():
 class FakeResponse:
     def __init__(self, status: int, body: bytes):
         self.status_code, self.body = status, body
+        self.text = body.decode()
 
     def __enter__(self):
         return self
@@ -46,15 +47,17 @@ class FakeResponse:
 
 
 class FakeHTTP:
-    """2025 not published (400), 2024 header only, 2023-2021 have data."""
+    """Rejects requests with 3 data filters; 2025 not published (400), 2024 header only, 2023-2021 have data."""
 
     def __init__(self):
         self.calls = []
 
     def get(self, url, params, stream, timeout):
         year = int(params["years"])
-        self.calls.append(year)
+        self.calls.append((year, len(params) - 2))
         assert params["states"] == "GA" and params["actions_taken"] == "1,2,3"
+        if len(params) - 2 > 2:
+            return FakeResponse(400, b'{"errorType":"too-many-filters"}')
         if year == 2025:
             return FakeResponse(400, b"invalid year")
         if year == 2024:
@@ -62,13 +65,25 @@ class FakeHTTP:
         return FakeResponse(200, b"activity_year,lei\n%d,X\n" % year)
 
 
-def test_fetch_latest_skips_unpublished_years(tmp_path):
+def test_fetch_latest_relaxes_filters_and_skips_unpublished_years(tmp_path, caplog):
     cfg = replace(Config(), data_dir=tmp_path)
     http = FakeHTTP()
-    files = download.fetch_latest(cfg, http, today=datetime(2026, 3, 1, tzinfo=UTC))
+    with caplog.at_level("WARNING"):
+        files = download.fetch_latest(cfg, http, today=datetime(2026, 3, 1, tzinfo=UTC))
     assert list(files) == [2021, 2022, 2023]
-    assert http.calls == [2025, 2024, 2023, 2022, 2021]
+    assert [c for c in http.calls if c[0] == 2023] == [(2023, 3), (2023, 2)]  # dropped lien_statuses, then OK
+    assert [c for c in http.calls if c[0] == 2025] == [(2025, 3), (2025, 2), (2025, 1)]
+    assert "too-many-filters" in caplog.text and "invalid year" in caplog.text
     assert not (tmp_path / "raw" / "hmda_GA_2024.csv").exists()
+
+
+def test_json_error_with_status_200_is_not_data(tmp_path):
+    class JsonHTTP:
+        def get(self, url, params, stream, timeout):
+            return FakeResponse(200, b'{"errorType":"x","message":"bad"}')
+
+    cfg = replace(Config(), data_dir=tmp_path)
+    assert download.fetch_year(cfg, 2024, tmp_path / "x.csv", JsonHTTP()) is None
 
 
 @pytest.fixture(scope="module")
