@@ -89,48 +89,76 @@ def session() -> requests.Session:
     return s
 
 
-def fetch_year(cfg: Config, year: int, dest: Path, http: requests.Session) -> Path | None:
-    """Download one year's CSV. Returns None if that year is not published yet (empty or 4xx response)."""
-    params = {"states": cfg.state, "years": str(year), **cfg.filters}
-    dest.parent.mkdir(parents=True, exist_ok=True)
+class Unavailable(Exception):
+    """The API returned no data for a request (rejected or empty); carries what it said."""
+
+
+def _download(cfg: Config, params: dict, dest: Path, http: requests.Session) -> None:
     with http.get(cfg.api_url, params=params, stream=True, timeout=900) as r:
-        if r.status_code in (400, 404):
-            return None
+        if 400 <= r.status_code < 500:
+            raise Unavailable(f"HTTP {r.status_code}: {r.text[:300].strip()}")
         r.raise_for_status()
         with dest.open("wb") as fh:
             for chunk in r.iter_content(chunk_size=1 << 20):
                 fh.write(chunk)
     with dest.open("rb") as fh:
-        lines = sum(1 for _ in zip(range(3), fh, strict=False))
-    if lines < 2:  # header only: no data for that year yet
+        head = [line for _, line in zip(range(2), fh, strict=False)]
+    if len(head) < 2 or not head[0].lower().startswith(b"activity_year"):
+        snippet = b"".join(head)[:300].decode("utf-8", "replace").strip()
         dest.unlink()
-        return None
-    log.info("HMDA %s %s: %s MB", cfg.state, year, f"{dest.stat().st_size / 1e6:,.0f}")
-    return dest
+        raise Unavailable(f"no data rows (response began: {snippet!r})")
+
+
+def fetch_year(cfg: Config, year: int, dest: Path, http: requests.Session) -> Path | None:
+    """Download one year's CSV, or None if the API has no data for it (e.g. not published yet).
+
+    The API's rules on combining filters are not fully documented, so if a request is rejected the filters are
+    relaxed one at a time (the dropped ones are re-applied locally in prepare.py). Every rejection is logged."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    filters = list(cfg.filters.items())
+    while True:
+        params = {"states": cfg.state, "years": str(year), **dict(filters)}
+        try:
+            _download(cfg, params, dest, http)
+        except Unavailable as exc:
+            log.warning("HMDA %s with filters %s: %s", year, dict(filters), exc)
+            if len(filters) > 1:
+                filters = filters[:-1]
+                continue
+            return None
+        log.info(
+            "HMDA %s %s: %s MB (filters %s)",
+            cfg.state,
+            year,
+            f"{dest.stat().st_size / 1e6:,.0f}",
+            dict(filters),
+        )
+        return dest
 
 
 def fetch_latest(
     cfg: Config, http: requests.Session | None = None, today: datetime | None = None
 ) -> dict[int, Path]:
-    """The newest `n_years` published years (HMDA for year Y is released around mid Y+1)."""
+    """The newest `n_years` published years (HMDA for year Y is released around spring of Y+1)."""
     http = http or session()
     year = (today or datetime.now(UTC)).year - 1
     files: dict[int, Path] = {}
     while len(files) < cfg.n_years and year >= cfg.first_year:
         try:
             path = fetch_year(cfg, year, cfg.data_dir / "raw" / f"hmda_{cfg.state}_{year}.csv", http)
-        except (
-            requests.RequestException
-        ) as exc:  # one bad year should not stop the run; too few years still will
+        # One bad year should not stop the run (too few years still will).
+        except requests.RequestException as exc:
             log.warning("HMDA %s could not be downloaded: %s", year, exc)
             path = None
         if path:
             files[year] = path
         else:
-            log.info("HMDA %s is not published yet; trying %s", year, year - 1)
+            log.info("No HMDA data for %s; trying %s", year, year - 1)
         year -= 1
     if len(files) < 2:
-        raise RuntimeError("Fewer than two years of HMDA data are available; cannot train and test.")
+        raise RuntimeError(
+            "Fewer than two years of HMDA data could be downloaded; see the warnings above for what the API said."
+        )
     return dict(sorted(files.items()))
 
 
