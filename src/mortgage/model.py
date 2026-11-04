@@ -36,7 +36,6 @@ CATEGORICAL = [
     "conforming_loan_limit",
     "dwelling",
     "submission",
-    "payable_to_lender",
     "aus",
 ]
 FEATURES = NUMERIC + CATEGORICAL
@@ -332,6 +331,22 @@ class Result:
     iv: pd.DataFrame
     shap: dict
     booster_info: dict
+    single_feature: pd.DataFrame | None = None
+
+
+def single_feature_auc(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
+    """Leakage check: how well does each feature alone rank the held-out year? A single application-time field
+    that nearly separates denials from approvals is more likely a reporting artifact than a credit signal."""
+    rows = []
+    for f in FEATURES:
+        if f in CATEGORICAL:
+            rates = train.groupby(train[f].astype(str))["denied"].mean()
+            s = test[f].astype(str).map(rates).fillna(train["denied"].mean())
+        else:
+            s = test[f].astype(float).fillna(test[f].astype(float).median())
+        auc = roc_auc_score(test["denied"], s) if s.nunique() > 1 else 0.5
+        rows.append({"feature": f, "label": LABELS.get(f, f), "auc": max(auc, 1 - auc)})
+    return pd.DataFrame(rows).sort_values("auc", ascending=False).reset_index(drop=True)
 
 
 def explain(booster, x: pd.DataFrame, seed: int, n: int = 4000) -> dict:
@@ -443,6 +458,7 @@ def run(df: pd.DataFrame, seed: int = 42) -> Result:
         scorecard_points=sc.points_table(),
         iv=sc.iv_all.assign(in_scorecard=lambda d: d["feature"].isin(list(sc.binnings))),
         shap=explain(booster, xs, seed),
+        single_feature=single_feature_auc(train, test),
         booster_info={
             "best_iteration": int(booster.best_iteration),
             "unconstrained_best_iteration": int(free.best_iteration),

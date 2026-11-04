@@ -101,7 +101,10 @@ def test_load_and_filters(prepared):
     assert raw == 4500
     assert flow["applications"].iloc[0] == raw
     assert flow["applications"].is_monotonic_decreasing
-    assert flow["applications"].iloc[-1] == len(df)
+    assert flow["applications"].iloc[-2] == len(df)
+    assert flow["applications"].iloc[-1] == df["complete_file"].sum() < len(df)
+    complete = df[df["complete_file"]]
+    assert complete[["dti", "cltv", "property_value_k", "income_k"]].notna().all().all()
     assert set(df["year"]) == set(fixture.YEARS)
     con = duckdb.connect(str(cfg.db_path), read_only=True)
     # excluded rows really are gone
@@ -124,6 +127,7 @@ def test_no_protected_or_post_decision_columns_in_features(prepared):
         "purchaser",
         "tract",
         "co_applicant",
+        "payable",
     )
     assert not [f for f in FEATURES if any(b in f for b in banned)]
 
@@ -131,7 +135,8 @@ def test_no_protected_or_post_decision_columns_in_features(prepared):
 def test_dti_bands_and_codes(prepared):
     *_, df = prepared
     assert set(df["dti"].dropna().unique()) <= {15, 25, 33, 55, 65, *range(36, 50)}
-    assert df["dti"].isna().any()  # "NA" becomes missing, not zero
+    assert df["dti"].isna().any()  # "NA" becomes missing, not zero (and the file is not "complete")
+    assert not df.loc[df["dti"].isna(), "complete_file"].any()
     assert df["income_k"].min() > 0
     assert set(df["denied"]) == {0, 1}
     assert set(df["race_ethnicity"]) <= {

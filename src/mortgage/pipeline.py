@@ -34,15 +34,25 @@ def run(cfg: Config, *, use_fixture: bool = False) -> dict:
     # 2. Load and prepare in DuckDB.
     rows = download.load(cfg, files)
     flow = prepare.build(cfg.db_path)
-    df = prepare.load_applications(cfg.db_path)
-    log.info("Loaded %s raw rows; %s applications in the modeling sample", f"{rows:,}", f"{len(df):,}")
+    df_all = prepare.load_applications(cfg.db_path)
+    df = df_all[df_all["complete_file"]].reset_index(drop=True)
+    log.info(
+        "Loaded %s raw rows; %s decided applications, %s complete files modeled",
+        f"{rows:,}",
+        f"{len(df_all):,}",
+        f"{len(df):,}",
+    )
 
     # 3. Models and audit.
     res = model.run(df, seed=cfg.seed)
+    sf = res.single_feature.head(3)
+    log.info(
+        "Strongest single features (AUC): %s", ", ".join(f"{r.label} {r.auc:.3f}" for r in sf.itertuples())
+    )
     audit = fairness.audit(res.test, min_n=100 if use_fixture else 300)
 
     # 4. Site, model card, README.
-    summary = build_site(cfg, df, flow, res, audit, synthetic=use_fixture)
+    summary = build_site(cfg, df, flow, res, audit, synthetic=use_fixture, df_all=df_all)
     if not use_fixture:
         update_readme(cfg.readme_path, summary)
         (cfg.readme_path.parent / "MODEL_CARD.md").write_text(summary["model_card"], encoding="utf-8")

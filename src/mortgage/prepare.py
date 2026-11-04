@@ -4,6 +4,13 @@ Only information a lender has when it makes the decision is used as a feature. T
 * protected characteristics (race, ethnicity, sex, age): they are kept only to audit the model afterwards;
 * geography and census-tract demographics (they can act as proxies for race);
 * anything recorded after the decision (interest rate, fees, denial reasons, who bought the loan).
+Two more kinds of fields are handled with care because HMDA's reporting rules tie them to the outcome:
+* "initially payable to the institution" is reported as not applicable for most denied applications, so it is kept
+  out of the features entirely;
+* debt-to-income, loan-to-value, property value and income are reported as not applicable when the lender made no
+  credit decision on them or did not rely on them (often on files denied early). The model is therefore trained and
+  audited on "complete files" where all four were reported; `complete_file` marks them, and the report shows how
+  the restriction changes the denial rates.
 Whether there is a co-applicant is also left out, because it can stand in for marital status, which the Equal Credit
 Opportunity Act protects (the combined income of both applicants is still used).
 """
@@ -116,19 +123,27 @@ FROM raw.lar""").fetchall()
                 "loan_amount > 0 AND action_taken IN (1, 2, 3) AND year IS NOT NULL",
             ),
         ]
+        complete = (
+            "dti IS NOT NULL AND cltv_raw > 0 AND cltv_raw <= 250 AND property_value > 0 AND income_k > 0"
+        )
         flow, cond = [], []
-        for label, c in steps:
+        for label, c in [
+            *steps,
+            ("Complete file: income, debt-to-income, loan-to-value, property value reported", complete),
+        ]:
             cond.append(f"({c})")
             n, d = con.execute(
                 f"SELECT count(*), sum(denied) FROM main.typed WHERE {' AND '.join(cond)}"
             ).fetchall()[0]
             flow.append({"step": label, "applications": n, "denied": int(d or 0)})
+        cond.pop()  # the table keeps incomplete files too (flagged), so their denial rates can be reported
 
         con.execute(f"""
 CREATE OR REPLACE TABLE main.applications AS
 SELECT
     row_number() OVER (ORDER BY year, lei, loan_amount)        AS app_id,
     year, lei, denied, action_taken,
+    ({complete})::BOOLEAN                                      AS complete_file,
     loan_amount / 1000                                         AS loan_amount_k,
     property_value / 1000                                      AS property_value_k,
     CASE WHEN cltv_raw > 0 AND cltv_raw <= 250 THEN cltv_raw END AS cltv,

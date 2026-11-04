@@ -108,3 +108,10 @@ def test_audit_recovers_planted_gap(result):
     s = race["summary"]
     assert 0 <= s["demographic_parity_difference"] <= 1 and 0 <= s["equalized_odds_difference"] <= 1
     assert set(a) == {"race_ethnicity", "sex", "age_group"}
+
+
+def test_single_feature_leakage_check(result):
+    sf = result.single_feature
+    assert set(sf["feature"]) == set(model.FEATURES)
+    assert sf["auc"].between(0.5, 1).all() and sf["auc"].is_monotonic_decreasing
+    assert sf["auc"].iloc[0] < 0.8  # no single field gives the answer away in the fixture

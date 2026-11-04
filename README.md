@@ -23,27 +23,7 @@ Every year, most U.S. mortgage lenders must report each application they receive
 Rewritten automatically after every run.
 
 <!-- RESULTS:START -->
-_HMDA Georgia home-purchase applications, 2023–2025 · 403,351 applications · trained on 2023, validated on 2024, tested on 2025_
-
-| Model (held-out year) | ROC AUC | PR AUC | KS | Brier |
-|---|---|---|---|---|
-| LightGBM, monotonic + calibrated | 0.921 | 0.806 | 0.698 | 0.0562 |
-| LightGBM, unconstrained | 0.923 | 0.817 | 0.701 | 0.0555 |
-| WoE logistic scorecard | 0.873 | 0.676 | 0.594 | 0.0776 |
-| Baseline: lender's past denial rate only | 0.768 | 0.460 | 0.392 | 0.1013 |
-
-**Denial rate in 2025:** 15.0% · **top features (SHAP):** Debt-to-income (%), Lender's past denial rate, Lender size (log applications), Underwriting system, Preapproval
-
-**Largest race/ethnicity gap:** Black applicants were denied 24.2% of the time vs. 10.8% for Non-Hispanic White applicants (2.24×).
-Odds ratio of denial 2.64 unadjusted → 1.83 (95% CI 1.61–2.08) after adjusting for the credit factors in the model's score. HMDA has no credit scores, so this is a flag for review, not proof of discrimination.
-
-| Fairness (held-out year) | Actual denial-rate gap | Model flag-rate gap | Equalized-odds diff. |
-|---|---|---|---|
-| Race and ethnicity | 14.7 pts | 15.4 pts | 14.9 pts |
-| Sex | 8.0 pts | 7.6 pts | 6.1 pts |
-| Age | 2.2 pts | 1.4 pts | 3.6 pts |
-
-_Last run: 2026-11-04 13:45 UTC_
+_Results appear here after the first run of the **Build model** workflow._
 <!-- RESULTS:END -->
 
 ## How it works
@@ -76,6 +56,11 @@ Dashboard (GitHub Pages) · MODEL_CARD.md · this README's results block  ← Gi
   only used for the audit), as are census-tract demographics and geography (possible proxies for race), whether there
   is a co-applicant (can stand in for marital status), and anything recorded after the decision (interest rate, fees,
   denial reasons, purchaser).
+* **No outcome leakage from HMDA's reporting rules.** HMDA reports "initially payable to the institution" as not
+  applicable for most denied applications, and debt-to-income, loan-to-value, property value and income as not
+  applicable when the lender made no credit decision on them or did not rely on them. The first field is excluded and
+  the models are trained and audited on complete files (all four reported); the dashboard shows denial rates with and
+  without that restriction.
 * **Out-of-time evaluation.** Models never see the test year, the way a model is used in practice.
 * **Monotonic constraints.** Predicted risk can never fall as debt-to-income, loan-to-value or loan-to-income rise, or
   rise as income rises. The dashboard shows what the constraints cost by comparing against an unconstrained model.

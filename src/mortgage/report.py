@@ -530,7 +530,8 @@ def model_card(cfg: Config, res: Result, audit: dict, n_total: int, built_at: st
         "## Data",
         f"- Source: CFPB HMDA Data Browser API (public loan-level records), state of {cfg.state_name}.",
         f"- Sample: {n_total:,} home-purchase, first-lien, principal-residence applications for 1-4 unit homes that "
-        "were approved or denied (withdrawn and incomplete files excluded).",
+        "were approved or denied (withdrawn and incomplete applications excluded), restricted to complete files: "
+        "income, debt-to-income, combined loan-to-value and property value all reported.",
         f"- Out-of-time split: train {', '.join(map(str, y['train']))} ({y['n_train']:,}) · validation {y['valid']} "
         f"({y['n_valid']:,}, early stopping, calibration, decision threshold) · test {y['test']} ({y['n_test']:,}).",
         "- Target: denied (action taken = 3) vs. approved (originated, or approved but not accepted).",
@@ -538,11 +539,13 @@ def model_card(cfg: Config, res: Result, audit: dict, n_total: int, built_at: st
         "## Features",
         "- Used: loan amount, property value, combined loan-to-value, debt-to-income, income, loan-to-income, income "
         "relative to the area median, loan term, units, loan type, preapproval, conforming-limit status, dwelling "
-        "type, application channel, whether the loan was payable to the lender, automated underwriting system, and "
+        "type, application channel, automated underwriting system, and "
         "the lender's smoothed historical denial rate and size (from training years only, out-of-fold).",
         "- Excluded on purpose: race, ethnicity, sex and age (used only for the audit); co-applicant presence (can "
         "stand in for marital status); census-tract demographics and geography (can act as proxies for race); and "
-        "anything recorded after the decision (interest rate, rate spread, fees, denial reasons, purchaser).",
+        "anything recorded after the decision (interest rate, rate spread, fees, denial reasons, purchaser). "
+        "'Initially payable to the institution' is also excluded: HMDA reports it as not applicable for most denied "
+        "applications, so it leaks the outcome.",
         f"- Monotonic constraints (LightGBM): {mono}.",
         "",
         "## Performance (held-out year " + str(y["test"]) + ")",
@@ -556,6 +559,8 @@ def model_card(cfg: Config, res: Result, audit: dict, n_total: int, built_at: st
         f"- Observed denial rate in {y['test']}: {m.loc[MAIN, 'observed_rate']:.1%}; mean calibrated prediction: "
         f"{m.loc[MAIN, 'mean_predicted']:.1%}.",
         f"- Most influential features (mean |SHAP|): {imp}.",
+        f"- Leakage check: the strongest single feature on its own reaches ROC AUC "
+        f"{res.single_feature['auc'].iloc[0]:.3f} ({res.single_feature['label'].iloc[0]}).",
         f"- Decision threshold for the audit: flag applications with predicted probability ≥ {res.threshold:.3f} "
         f"(the share flagged in {y['valid']} equals that year's actual denial rate).",
         "",
@@ -584,8 +589,10 @@ def model_card(cfg: Config, res: Result, audit: dict, n_total: int, built_at: st
         "- HMDA has no credit scores, credit histories, assets or employment data, so differences that remain after "
         "adjustment cannot be attributed to discrimination; they mark where a closer review would start.",
         "- The model learns past lending decisions, including any bias in them. It must not be used to make decisions.",
-        "- Fields such as debt-to-income can be reported as not applicable when a lender did not rely on them (often on "
-        "files denied early), so missing values carry some information about the decision process.",
+        "- HMDA reports debt-to-income, loan-to-value, property value and income as not applicable when the lender "
+        "made no credit decision on them or did not rely on them (often files denied early). Missing values would leak "
+        "the outcome, so only complete files are modeled; the excluded files are mostly denials, so the audit "
+        "describes decisions on complete files (the dashboard shows rates on all decided files too).",
         "- Lender identity is used as a feature; lenders that serve different communities may differ in denial rates "
         "for reasons that are themselves worth auditing.",
         "- Race and ethnicity are as reported in HMDA: usually self-reported, but for some in-person applications where "
@@ -598,8 +605,15 @@ def model_card(cfg: Config, res: Result, audit: dict, n_total: int, built_at: st
 
 
 def build_site(
-    cfg: Config, df: pd.DataFrame, flow: pd.DataFrame, res: Result, audit: dict, synthetic: bool = False
+    cfg: Config,
+    df: pd.DataFrame,
+    flow: pd.DataFrame,
+    res: Result,
+    audit: dict,
+    synthetic: bool = False,
+    df_all: pd.DataFrame | None = None,
 ) -> dict:
+    df_all = df if df_all is None else df_all
     site = cfg.site_dir
     site.mkdir(parents=True, exist_ok=True)
     built_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
@@ -652,15 +666,36 @@ def build_site(
         [
             html.escape(r.step),
             _int(r.applications),
-            _pct(r.denied / r.applications if r.applications else np.nan),
+            f"{r.denied / r.applications:.1%}" if r.applications else "–",
         ]
         for r in flow.itertuples()
     ]
-    miss = df.assign(dti_missing=df["dti"].isna()).groupby("denied")["dti_missing"].mean()
+    inc = df_all[~df_all["complete_file"]]
     miss_note = (
-        f"Debt-to-income is missing for {miss.get(1, 0):.1%} of denied applications vs. {miss.get(0, 0):.1%} "
-        "of approved ones (lenders may report it as not applicable when they did not rely on it)."
+        f"{_int(len(inc))} decided applications ({len(inc) / len(df_all):.1%}) are not complete files; "
+        f"{inc['denied'].mean() if len(inc) else 0:.1%} of them were denied. HMDA reports those fields as not "
+        "applicable when the lender made no credit decision on them or did not rely on them, so their absence "
+        "would leak the outcome into the model."
     )
+    t_all = df_all[df_all["year"] == y["test"]]
+    ctx = (
+        t_all.groupby("race_ethnicity")
+        .agg(
+            n_all=("denied", "size"),
+            rate_all=("denied", "mean"),
+            n_complete=("complete_file", "sum"),
+        )
+        .join(
+            t_all[t_all["complete_file"]].groupby("race_ethnicity")["denied"].mean().rename("rate_complete")
+        )
+        .reindex(audit["race_ethnicity"]["groups"]["group"])
+        .dropna(subset=["n_all"])
+    )
+    ctx_rows = [
+        [html.escape(g), _int(r.n_all), f"{r.rate_all:.1%}", _int(r.n_complete), f"{r.rate_complete:.1%}"]
+        for g, r in ctx.iterrows()
+    ]
+    context_html = _table(["Group", "All decided", "Denied", "Complete files", "Denied"], ctx_rows)
 
     race = audit["race_ethnicity"]
     other_attrs = [a for k, a in audit.items() if k != "race_ethnicity"]
@@ -703,13 +738,20 @@ def build_site(
 This project uses {cfg.state_name}'s home-purchase applications that ended in a decision. Models train on
 {", ".join(map(str, y["train"]))}, tune on {y["valid"]} and are tested on {y["test"]}, a year they never saw.</p>
 <div class="grid2"><div><h3>Sample</h3>{_table(["Step", "Applications", "Share denied"], flow_rows)}
-<p class="muted">{miss_note}</p></div>{_div(fig_years(df, y))}</div></section>
+<p class="muted">{miss_note}</p></div><div>{_div(fig_years(df, y))}
+<h3>Denial rates in {y["test"]}: all decided applications vs. complete files</h3>{context_html}</div></div></section>
 
 <section><h2>How well can denials be predicted?</h2>
 <p>Four models on the held-out year: a monotonic LightGBM with isotonic calibration (the main model), the same model
 without monotonic constraints (what the constraints cost in accuracy), a weight-of-evidence logistic scorecard (the
 classic, fully explainable credit model), and a baseline that only knows the lender's past denial rate.</p>
 {metrics_table(res.metrics)}
+<details><summary>Leakage check: each feature on its own</summary>
+<p class="muted">ROC AUC of each feature used alone on the held-out year (categories scored by their training-year
+denial rate). A single application-time field that nearly separates denials from approvals would point to a
+reporting artifact rather than a credit signal.</p>
+{_table(["Feature", "ROC AUC alone"], [[html.escape(r.label), _f(r.auc)] for r in res.single_feature.itertuples()])}
+</details>
 <div class="grid2">{_div(fig_roc(res))}{_div(fig_calibration(res))}</div>
 <p class="muted">Calibration was fitted on {y["valid"]}; if the market's denial rate shifts between years, predictions
 shift with it (mean prediction {_pct(m.loc[MAIN, "mean_predicted"])} vs. actual {_pct(test_rate)} in {y["test"]}).</p>
