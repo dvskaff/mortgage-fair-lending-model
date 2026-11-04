@@ -1,6 +1,6 @@
 # Model card: mortgage denial model (HMDA, Georgia)
 
-_Generated automatically on 2026-11-04 13:45 UTC by the pipeline in this repository._
+_Generated automatically on 2026-11-04 14:16 UTC by the pipeline in this repository._
 
 ## Intended use
 - **What it is:** a model of how lenders decided home-purchase mortgage applications, trained on public HMDA records, plus a fair-lending audit of those decisions and of the model.
@@ -9,41 +9,42 @@ _Generated automatically on 2026-11-04 13:45 UTC by the pipeline in this reposit
 
 ## Data
 - Source: CFPB HMDA Data Browser API (public loan-level records), state of Georgia.
-- Sample: 403,351 home-purchase, first-lien, principal-residence applications for 1-4 unit homes that were approved or denied (withdrawn and incomplete files excluded).
-- Out-of-time split: train 2023 (137,135) · validation 2024 (134,285, early stopping, calibration, decision threshold) · test 2025 (131,931).
+- Sample: 348,927 home-purchase, first-lien, principal-residence applications for 1-4 unit homes that were approved or denied (withdrawn and incomplete applications excluded), restricted to complete files: income, debt-to-income, combined loan-to-value and property value all reported.
+- Out-of-time split: train 2023 (119,203) · validation 2024 (115,824, early stopping, calibration, decision threshold) · test 2025 (113,900).
 - Target: denied (action taken = 3) vs. approved (originated, or approved but not accepted).
 
 ## Features
-- Used: loan amount, property value, combined loan-to-value, debt-to-income, income, loan-to-income, income relative to the area median, loan term, units, loan type, preapproval, conforming-limit status, dwelling type, application channel, whether the loan was payable to the lender, automated underwriting system, and the lender's smoothed historical denial rate and size (from training years only, out-of-fold).
-- Excluded on purpose: race, ethnicity, sex and age (used only for the audit); co-applicant presence (can stand in for marital status); census-tract demographics and geography (can act as proxies for race); and anything recorded after the decision (interest rate, rate spread, fees, denial reasons, purchaser).
+- Used: loan amount, property value, combined loan-to-value, debt-to-income, income, loan-to-income, income relative to the area median, loan term, units, loan type, preapproval, conforming-limit status, dwelling type, application channel, automated underwriting system, and the lender's smoothed historical denial rate and size (from training years only, out-of-fold).
+- Excluded on purpose: race, ethnicity, sex and age (used only for the audit); co-applicant presence (can stand in for marital status); census-tract demographics and geography (can act as proxies for race); and anything recorded after the decision (interest rate, rate spread, fees, denial reasons, purchaser). 'Initially payable to the institution' is also excluded: HMDA reports it as not applicable for most denied applications, so it leaks the outcome.
 - Monotonic constraints (LightGBM): predicted risk can never fall as debt-to-income (%), combined loan-to-value (%), loan ÷ income rise, and never rise as income ($k), income ÷ area median rise.
 
 ## Performance (held-out year 2025)
 | Model | ROC AUC | PR AUC | KS | Brier |
 |---|---|---|---|---|
-| LightGBM, monotonic + calibrated | 0.921 | 0.806 | 0.698 | 0.0562 |
-| LightGBM, unconstrained | 0.923 | 0.817 | 0.701 | 0.0555 |
-| WoE logistic scorecard | 0.873 | 0.676 | 0.594 | 0.0776 |
-| Baseline: lender's past denial rate only | 0.768 | 0.460 | 0.392 | 0.1013 |
+| LightGBM, monotonic + calibrated | 0.847 | 0.596 | 0.527 | 0.0583 |
+| LightGBM, unconstrained | 0.851 | 0.610 | 0.533 | 0.0580 |
+| WoE logistic scorecard | 0.800 | 0.400 | 0.441 | 0.0751 |
+| Baseline: lender's past denial rate only | 0.679 | 0.225 | 0.269 | 0.0855 |
 
-- Observed denial rate in 2025: 15.0%; mean calibrated prediction: 15.1%.
-- Most influential features (mean |SHAP|): Debt-to-income (%), Lender's past denial rate, Lender size (log applications), Underwriting system, Preapproval.
-- Decision threshold for the audit: flag applications with predicted probability ≥ 0.282 (the share flagged in 2024 equals that year's actual denial rate).
+- Observed denial rate in 2025: 10.1%; mean calibrated prediction: 10.3%.
+- Most influential features (mean |SHAP|): Lender's past denial rate, Debt-to-income (%), Preapproval, Combined loan-to-value (%), Loan type.
+- Leakage check: the strongest single feature on its own reaches ROC AUC 0.688 (Debt-to-income (%)).
+- Decision threshold for the audit: flag applications with predicted probability ≥ 0.180 (the share flagged in 2024 equals that year's actual denial rate).
 
 ## Fairness evaluation (held-out year)
 | Characteristic | Actual denial-rate gap | Model flag-rate gap | Equalized-odds difference |
 |---|---|---|---|
-| Race and ethnicity | 14.7 pts | 15.4 pts | 14.9 pts |
-| Sex | 8.0 pts | 7.6 pts | 6.1 pts |
-| Age | 2.2 pts | 1.4 pts | 3.6 pts |
+| Race and ethnicity | 10.2 pts | 10.2 pts | 6.8 pts |
+| Sex | 4.8 pts | 5.9 pts | 3.9 pts |
+| Age | 2.8 pts | 2.1 pts | 3.6 pts |
 
-- Largest race/ethnicity gap: Black applicants were denied 24.2% of the time vs. 10.8% for Non-Hispanic White applicants (2.24×; approval adverse impact ratio 0.85).
-- For Black applicants the odds of denial were 2.64× those of Non-Hispanic White applicants before adjustment and 1.83× (95% CI 1.61–2.08) after adjusting for the credit factors in the model's score. The credit factors HMDA records account for about 38% of the gap on the log-odds scale; the rest is statistically significant and would be a reason for a closer review with data HMDA does not contain (credit scores and histories).
+- Largest race/ethnicity gap: Black applicants were denied 16.8% of the time vs. 6.5% for Non-Hispanic White applicants (2.57×; approval adverse impact ratio 0.89).
+- For Black applicants the odds of denial were 2.89× those of Non-Hispanic White applicants before adjustment and 1.76× (95% CI 1.57–1.97) after adjusting for the credit factors in the model's score. The credit factors HMDA records account for about 47% of the gap on the log-odds scale; the rest is statistically significant and would be a reason for a closer review with data HMDA does not contain (credit scores and histories).
 
 ## Limitations and ethical considerations
 - HMDA has no credit scores, credit histories, assets or employment data, so differences that remain after adjustment cannot be attributed to discrimination; they mark where a closer review would start.
 - The model learns past lending decisions, including any bias in them. It must not be used to make decisions.
-- Fields such as debt-to-income can be reported as not applicable when a lender did not rely on them (often on files denied early), so missing values carry some information about the decision process.
+- HMDA reports debt-to-income, loan-to-value, property value and income as not applicable when the lender made no credit decision on them or did not rely on them (often files denied early). Missing values would leak the outcome, so only complete files are modeled; the excluded files are mostly denials, so the audit describes decisions on complete files (the dashboard shows rates on all decided files too).
 - Lender identity is used as a feature; lenders that serve different communities may differ in denial rates for reasons that are themselves worth auditing.
 - Race and ethnicity are as reported in HMDA: usually self-reported, but for some in-person applications where the applicant declined, recorded by the lender from visual observation or surname. Applicants with no information form a separate 'Not provided' group.
 - Adjusting the model with protected characteristics to equalize outcomes would itself be disparate treatment under ECOA, so no such mitigation is applied here.

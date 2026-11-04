@@ -23,7 +23,27 @@ Every year, most U.S. mortgage lenders must report each application they receive
 Rewritten automatically after every run.
 
 <!-- RESULTS:START -->
-_Results appear here after the first run of the **Build model** workflow._
+_HMDA Georgia home-purchase applications, 2023–2025 · 348,927 applications · trained on 2023, validated on 2024, tested on 2025_
+
+| Model (held-out year) | ROC AUC | PR AUC | KS | Brier |
+|---|---|---|---|---|
+| LightGBM, monotonic + calibrated | 0.847 | 0.596 | 0.527 | 0.0583 |
+| LightGBM, unconstrained | 0.851 | 0.610 | 0.533 | 0.0580 |
+| WoE logistic scorecard | 0.800 | 0.400 | 0.441 | 0.0751 |
+| Baseline: lender's past denial rate only | 0.679 | 0.225 | 0.269 | 0.0855 |
+
+**Denial rate in 2025:** 10.1% · **top features (SHAP):** Lender's past denial rate, Debt-to-income (%), Preapproval, Combined loan-to-value (%), Loan type
+
+**Largest race/ethnicity gap:** Black applicants were denied 16.8% of the time vs. 6.5% for Non-Hispanic White applicants (2.57×).
+Odds ratio of denial 2.89 unadjusted → 1.76 (95% CI 1.57–1.97) after adjusting for the credit factors in the model's score. HMDA has no credit scores, so this is a flag for review, not proof of discrimination.
+
+| Fairness (held-out year) | Actual denial-rate gap | Model flag-rate gap | Equalized-odds diff. |
+|---|---|---|---|
+| Race and ethnicity | 10.2 pts | 10.2 pts | 6.8 pts |
+| Sex | 4.8 pts | 5.9 pts | 3.9 pts |
+| Age | 2.8 pts | 2.1 pts | 3.6 pts |
+
+_Last run: 2026-11-04 14:16 UTC_
 <!-- RESULTS:END -->
 
 ## How it works
