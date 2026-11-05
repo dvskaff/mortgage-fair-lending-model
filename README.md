@@ -43,7 +43,7 @@ Odds ratio of denial 2.89 unadjusted → 1.76 (95% CI 1.57–1.97) after adjusti
 | Sex | 4.8 pts | 5.9 pts | 3.9 pts |
 | Age | 2.8 pts | 2.1 pts | 3.6 pts |
 
-_Last run: 2026-11-04 14:16 UTC_
+_Last run: 2026-11-05 18:08 UTC_
 <!-- RESULTS:END -->
 
 ## How it works

@@ -1,6 +1,6 @@
 # Model card: mortgage denial model (HMDA, Georgia)
 
-_Generated automatically on 2026-11-04 14:16 UTC by the pipeline in this repository._
+_Generated automatically on 2026-11-05 18:08 UTC by the pipeline in this repository._
 
 ## Intended use
 - **What it is:** a model of how lenders decided home-purchase mortgage applications, trained on public HMDA records, plus a fair-lending audit of those decisions and of the model.
