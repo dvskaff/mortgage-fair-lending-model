@@ -29,9 +29,9 @@ _HMDA Georgia home-purchase applications, 2023–2025 · 348,927 applications ·
 
 | Model (held-out year) | ROC AUC | PR AUC | KS | Brier |
 |---|---|---|---|---|
-| LightGBM, monotonic + calibrated | 0.847 | 0.596 | 0.527 | 0.0583 |
-| LightGBM, unconstrained | 0.851 | 0.610 | 0.533 | 0.0580 |
-| WoE logistic scorecard | 0.800 | 0.400 | 0.441 | 0.0751 |
+| LightGBM, monotonic + calibrated | 0.848 | 0.598 | 0.528 | 0.0583 |
+| LightGBM, unconstrained | 0.850 | 0.610 | 0.530 | 0.0580 |
+| WoE logistic scorecard | 0.800 | 0.401 | 0.443 | 0.0750 |
 | Baseline: lender's past denial rate only | 0.679 | 0.225 | 0.269 | 0.0855 |
 
 **Denial rate in 2025:** 10.1% · **top features (SHAP):** Lender's past denial rate, Debt-to-income (%), Preapproval, Combined loan-to-value (%), Loan type
@@ -41,11 +41,11 @@ Odds ratio of denial 2.89 unadjusted → 1.76 (95% CI 1.57–1.97) after adjusti
 
 | Fairness (held-out year) | Actual denial-rate gap | Model flag-rate gap | Equalized-odds diff. |
 |---|---|---|---|
-| Race and ethnicity | 10.2 pts | 10.2 pts | 6.8 pts |
-| Sex | 4.8 pts | 5.9 pts | 3.9 pts |
-| Age | 2.8 pts | 2.1 pts | 3.6 pts |
+| Race and ethnicity | 10.2 pts | 9.9 pts | 6.6 pts |
+| Sex | 4.8 pts | 5.7 pts | 4.1 pts |
+| Age | 2.8 pts | 2.0 pts | 3.8 pts |
 
-_Last run: 2026-11-05 18:08 UTC_
+_Last run: 2026-11-08 20:13 UTC_
 <!-- RESULTS:END -->
 
 ## Try the scorecard
