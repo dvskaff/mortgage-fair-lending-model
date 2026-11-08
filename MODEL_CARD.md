@@ -1,6 +1,6 @@
 # Model card: mortgage denial model (HMDA, Georgia)
 
-_Generated automatically on 2026-11-08 20:13 UTC by the pipeline in this repository._
+_Generated automatically on 2026-11-08 20:44 UTC by the pipeline in this repository._
 
 ## Intended use
 - **What it is:** a model of how lenders decided home-purchase mortgage applications, trained on public HMDA records, plus a fair-lending audit of those decisions and of the model.
@@ -21,22 +21,22 @@ _Generated automatically on 2026-11-08 20:13 UTC by the pipeline in this reposit
 ## Performance (held-out year 2025)
 | Model | ROC AUC | PR AUC | KS | Brier |
 |---|---|---|---|---|
-| LightGBM, monotonic + calibrated | 0.848 | 0.598 | 0.528 | 0.0583 |
-| LightGBM, unconstrained | 0.850 | 0.610 | 0.530 | 0.0580 |
-| WoE logistic scorecard | 0.800 | 0.401 | 0.443 | 0.0750 |
+| LightGBM, monotonic + calibrated | 0.847 | 0.596 | 0.527 | 0.0583 |
+| LightGBM, unconstrained | 0.851 | 0.610 | 0.533 | 0.0580 |
+| WoE logistic scorecard | 0.800 | 0.400 | 0.441 | 0.0751 |
 | Baseline: lender's past denial rate only | 0.679 | 0.225 | 0.269 | 0.0855 |
 
-- Observed denial rate in 2025: 10.1%; mean calibrated prediction: 10.2%.
+- Observed denial rate in 2025: 10.1%; mean calibrated prediction: 10.3%.
 - Most influential features (mean |SHAP|): Lender's past denial rate, Debt-to-income (%), Preapproval, Combined loan-to-value (%), Loan type.
 - Leakage check: the strongest single feature on its own reaches ROC AUC 0.688 (Debt-to-income (%)).
-- Decision threshold for the audit: flag applications with predicted probability ≥ 0.202 (the share flagged in 2024 equals that year's actual denial rate).
+- Decision threshold for the audit: flag applications with predicted probability ≥ 0.180 (the share flagged in 2024 equals that year's actual denial rate).
 
 ## Fairness evaluation (held-out year)
 | Characteristic | Actual denial-rate gap | Model flag-rate gap | Equalized-odds difference |
 |---|---|---|---|
-| Race and ethnicity | 10.2 pts | 9.9 pts | 6.6 pts |
-| Sex | 4.8 pts | 5.7 pts | 4.1 pts |
-| Age | 2.8 pts | 2.0 pts | 3.8 pts |
+| Race and ethnicity | 10.2 pts | 10.2 pts | 6.8 pts |
+| Sex | 4.8 pts | 5.9 pts | 3.9 pts |
+| Age | 2.8 pts | 2.1 pts | 3.6 pts |
 
 - Largest race/ethnicity gap: Black applicants were denied 16.8% of the time vs. 6.5% for Non-Hispanic White applicants (2.57×; approval adverse impact ratio 0.89).
 - For Black applicants the odds of denial were 2.89× those of Non-Hispanic White applicants before adjustment and 1.76× (95% CI 1.57–1.97) after adjusting for the credit factors in the model's score. The credit factors HMDA records account for about 47% of the gap on the log-odds scale; the rest is statistically significant and would be a reason for a closer review with data HMDA does not contain (credit scores and histories).
