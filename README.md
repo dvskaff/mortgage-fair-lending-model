@@ -5,7 +5,9 @@
 ![Python](https://img.shields.io/badge/python-3.13-blue) ![LightGBM](https://img.shields.io/badge/LightGBM-4.7-green)
 ![Fairlearn](https://img.shields.io/badge/Fairlearn-0.15-purple)
 
-**Live dashboard: https://dvskaff.github.io/mortgage-fair-lending-model/** · **[Model card](MODEL_CARD.md)**
+* **Dashboard:** [live results, rebuilt monthly](https://dvskaff.github.io/mortgage-fair-lending-model/)
+* **Scorer:** [try the scorecard on an application](https://dvskaff.github.io/mortgage-fair-lending-model/scorer.html)
+* **Model card:** [intended use, data, metrics and fairness results](MODEL_CARD.md)
 
 Every year, most U.S. mortgage lenders must report each application they receive under the Home Mortgage Disclosure Act
 (HMDA). This project uses Georgia's public HMDA records to answer two questions:
@@ -46,7 +48,35 @@ Odds ratio of denial 2.89 unadjusted → 1.76 (95% CI 1.57–1.97) after adjusti
 _Last run: 2026-11-05 18:08 UTC_
 <!-- RESULTS:END -->
 
+## Try the scorecard
+
+The [scorer](https://dvskaff.github.io/mortgage-fair-lending-model/scorer.html) lets anyone enter a home-purchase
+application (loan, property value, income, debt-to-income, lender) and see how the weight-of-evidence scorecard scores
+it: the total score, the predicted chance of denial, the points from each factor compared with a typical applicant,
+the factors costing the most points (like the reason codes on a credit decision), and how often applications with
+similar scores were actually denied in the held-out year. It runs entirely in the browser from the exported
+scorecard, and a test checks that its arithmetic matches the fitted model. Race, ethnicity, sex and age are not
+inputs.
+
 ## How it works
+
+```mermaid
+flowchart LR
+    API["CFPB HMDA<br/>Data Browser API"] -->|"newest 3 years<br/>schema check"| DB[("DuckDB<br/>raw records")]
+    DB --> PREP["Clean applications<br/>complete files only"]
+    PREP --> FEAT["Application-time features<br/>(no race, sex, age,<br/>geography)"]
+    PREP --> GROUPS["Audit groups<br/>race, ethnicity,<br/>sex, age"]
+    FEAT --> MODELS["Train oldest year<br/>validate middle<br/>test newest"]
+    MODELS --> LGBM["LightGBM<br/>monotonic + calibrated"]
+    MODELS --> CARD["WoE scorecard<br/>points per bin"]
+    LGBM --> AUDIT["Fair-lending audit<br/>AIR, Fairlearn,<br/>adjusted odds ratios"]
+    GROUPS --> AUDIT
+    LGBM --> SITE["Dashboard, model card<br/>+ README results"]
+    CARD --> SCORER["Scorer page<br/>in the browser"]
+    AUDIT --> SITE
+```
+
+<details><summary>Every step in detail</summary>
 
 ```
 CFPB HMDA Data Browser API (public, no key): one CSV per year, newest 3 published years found automatically
@@ -67,8 +97,10 @@ Fair-lending audit (src/mortgage/fairness.py), on the held-out year
         Fairlearn MetricFrame: flag rates, false-positive / false-negative rates, demographic parity, equalized odds
         calibration by group · unadjusted vs. adjusted odds ratios (statsmodels, lender-clustered SEs)
         ▼
-Dashboard (GitHub Pages) · MODEL_CARD.md · this README's results block  ← GitHub Actions, monthly
+Dashboard + scorer (GitHub Pages) · MODEL_CARD.md · this README's results block  ← GitHub Actions, monthly
 ```
+
+</details>
 
 ### Design choices
 
@@ -97,6 +129,7 @@ learns from past lending decisions and can reproduce any bias in them; it is not
 
 ```
 src/mortgage/      config · download · prepare · model · fairness · report (+ report_base) · readme · pipeline
+                   scorer.py: exports the scorecard and writes the interactive scorer page
                    fixture.py: SYNTHETIC HMDA-format data for tests (pages built from it carry a red banner)
 tests/             downloader (fake HTTP), preparation, models, fairness metrics, end-to-end run
 .github/workflows/ ci.yml (lint + tests on every push) · pipeline.yml (monthly real-data run → GitHub Pages)
