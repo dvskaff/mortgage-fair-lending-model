@@ -49,7 +49,7 @@ jobs:
           git add README.md MODEL_CARD.md
           if ! git diff --staged --quiet; then
             git commit -m "Update results: HMDA $(python -c 'import json;y=json.load(open("site/results.json"))["years"];print(y["train"][0], "-", y["test"])')"
-            git pull --rebase
+            git pull --rebase -X theirs  # our freshly generated results win any README conflict
             git push
           fi
 
