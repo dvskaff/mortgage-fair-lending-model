@@ -332,6 +332,9 @@ class Result:
     shap: dict
     booster_info: dict
     single_feature: pd.DataFrame | None = None
+    scorecard: Scorecard | None = (
+        None  # the fitted scorecard itself (bins, coefficients), for the online scorer
+    )
 
 
 def single_feature_auc(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
@@ -459,6 +462,7 @@ def run(df: pd.DataFrame, seed: int = 42) -> Result:
         iv=sc.iv_all.assign(in_scorecard=lambda d: d["feature"].isin(list(sc.binnings))),
         shap=explain(booster, xs, seed),
         single_feature=single_feature_auc(train, test),
+        scorecard=sc,
         booster_info={
             "best_iteration": int(booster.best_iteration),
             "unconstrained_best_iteration": int(free.best_iteration),

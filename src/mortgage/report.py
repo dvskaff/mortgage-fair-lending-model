@@ -728,7 +728,8 @@ def build_site(
   <p>Which home-purchase mortgage applications get denied, and are outcomes different across race, ethnicity, sex and
   age once credit factors are taken into account? Built from {_int(len(df))} public HMDA applications in
   {cfg.state_name} ({min(df["year"])}–{max(df["year"])}), with the newest year held out for testing.</p>
-  <a class="btn" href="{cfg.repo_url}">Code on GitHub</a><a class="btn" href="#model-card">Model card</a>
+  <a class="btn" href="scorer.html">Try the scorecard on an application</a><a class="btn" href="#model-card">Model card</a>
+  <a class="btn" href="{cfg.repo_url}">Code on GitHub</a>
 </div></header>
 <main>
 <div class="cards">{cards}</div>
@@ -767,12 +768,14 @@ value can never lower the predicted risk.</p>
 <section><h2>The scorecard</h2>
 <p>The scorecard bins each feature (merging bins until the denial rate moves in one direction), converts the bins
 to weight of evidence, keeps features with information value ≥ 0.02 and correct coefficient signs, and scales the
-logistic regression to points: 600 points = 20:1 odds of approval, +20 points doubles the odds.</p>
+logistic regression to points: 600 points = 20:1 odds of approval, +20 points doubles the odds.
+<b><a href="scorer.html">Try it on an application</a></b>: enter loan, income and lender details and see the score,
+the points for each factor and how applications with similar scores were decided in {y["test"]}.</p>
 <div class="grid2"><div><h3>Information value</h3>{_table(["Feature", "IV", "Bins", "In scorecard"], iv_rows)}</div>
 <div><h3>Points</h3><details><summary>Show all {len(pts_rows)} bins</summary>
 {_table(["Feature", "Bin", "WoE", "Points"], pts_rows, left_cols=2)}</details></div></div></section>
 
-<section><h2>Fair-lending audit: race and ethnicity</h2>
+<section id="fair-lending"><h2>Fair-lending audit: race and ethnicity</h2>
 <p>Observed denial rates in {y["test"]} and the model's predicted rate per group. Approval <b>adverse impact
 ratios</b> (AIR) below {FOUR_FIFTHS} (the "four-fifths" screen) are shown in red. The model flags the riskiest
 applications at the threshold that matches lenders' overall denial rate in {y["valid"]}; error rates show who it

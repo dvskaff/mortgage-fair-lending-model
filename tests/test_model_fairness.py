@@ -115,3 +115,24 @@ def test_single_feature_leakage_check(result):
     assert set(sf["feature"]) == set(model.FEATURES)
     assert sf["auc"].between(0.5, 1).all() and sf["auc"].is_monotonic_decreasing
     assert sf["auc"].iloc[0] < 0.8  # no single field gives the answer away in the fixture
+
+
+def test_scorer_export_reproduces_the_scorecard(result, tmp_path):
+    from mortgage import scorer
+
+    card = scorer.export(result, result.years)
+    t = result.test.head(300)
+    mine = [scorer.score(card, r) for r in t.to_dict(orient="records")]
+    assert np.allclose(mine, t["score"], atol=0.05)  # the page's arithmetic matches the fitted scorecard
+    assert {f["feature"] for f in card["features"]} == set(result.scorecard.binnings)
+    used = {f["feature"] for f in card["features"]}
+    assert not used & {"race_ethnicity", "sex", "age_group"}  # protected characteristics are never inputs
+    assert card["percentiles"] == sorted(card["percentiles"]) and len(card["bands"]) == 20
+    assert sum(b["n"] for b in card["bands"]) == len(result.test)
+    approved, denied = (
+        card["presets"][k] for k in ("Typical approved application", "Typical denied application")
+    )
+    assert approved["dti"] <= denied["dti"]
+    scorer.write_page(tmp_path, card, "https://example.org", "Georgia", synthetic=True)
+    page = (tmp_path / "scorer.html").read_text()
+    assert "SYNTHETIC TEST DATA" in page and "data/scorecard.json" in page and "not a credit decision" in page

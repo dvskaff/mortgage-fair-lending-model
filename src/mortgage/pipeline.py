@@ -15,7 +15,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from . import download, fairness, fixture, model, prepare
+from . import download, fairness, fixture, model, prepare, scorer
 from .config import Config
 from .readme import update_readme
 from .report import build_site
@@ -53,6 +53,8 @@ def run(cfg: Config, *, use_fixture: bool = False) -> dict:
 
     # 4. Site, model card, README.
     summary = build_site(cfg, df, flow, res, audit, synthetic=use_fixture, df_all=df_all)
+    # An interactive scorer for the scorecard (site/scorer.html); race, ethnicity, sex and age are not inputs.
+    scorer.write_page(cfg.site_dir, scorer.export(res, res.years), cfg.repo_url, cfg.state_name, use_fixture)
     if not use_fixture:
         update_readme(cfg.readme_path, summary)
         (cfg.readme_path.parent / "MODEL_CARD.md").write_text(summary["model_card"], encoding="utf-8")

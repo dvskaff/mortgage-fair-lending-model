@@ -24,6 +24,8 @@ def test_end_to_end_on_synthetic_data(tmp_path):
     assert results["synthetic"] is True
     assert results["years"]["test"] == 2024
     assert "SYNTHETIC" in (cfg.site_dir / "model_card.md").read_text()
+    assert (cfg.site_dir / "scorer.html").exists() and 'href="scorer.html"' in page
+    assert json.loads((cfg.site_dir / "data" / "scorecard.json").read_text())["test_year"] == 2024
 
     # the fixture run never touches the README; the real run rewrites only the results block
     assert cfg.readme_path.read_text() == (ROOT / "README.md").read_text()
